@@ -1,0 +1,12 @@
+\import Data.Bool
+\import Data.List
+
+\data BracketType
+  | square
+  | curly
+  | round
+
+\data Bracket
+  | bracket BracketType (is-open : Bool)
+
+\func BracketString => List Bracket

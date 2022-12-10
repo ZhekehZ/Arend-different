@@ -1,0 +1,318 @@
+\import BracketSequence
+\import CorrectBracketSequence
+\import Data.Bool
+\import Data.List
+\import Data.Maybe
+\import Logic
+\import Logic.Meta
+\import Meta
+\import Paths
+\import Paths.Meta
+
+\func proof-check-correctness :
+  ∀ (seq : BracketString) (check-correctness seq = true <-> IsCorrectBracketSequence seq) =>
+  transportInv
+      (\lam f => ∀ (seq : BracketString) (f seq = true <-> IsCorrectBracketSequence seq))
+      check-correctness-equivalence
+      proof-check-correctness-modified
+  \where {
+    \open CorrectBracketSequence (to-string \as cbs-to-string)
+    \open UnfinishedCBS (to-string \as ucbs-to-string, get-stack \as ucbs-get-stack)
+    \open UnfinishedCBS (is-finished \as ucbs-is-finished, stack-cbs-independence \as ucbs-stack-cbs-independence)
+    \open check-correctness-modified (aux \as ccm-aux)
+    \open check-aux-assoc-left (conseq-1 \as cc-al-c1)
+
+    \func check-correctness-modified (seq : BracketString): Bool =>
+      \case aux seq (just nil) \with {
+        | just nil => true
+        | _ => false
+      }
+      \where {
+        \func State => Maybe (List BracketType)
+
+        \func aux (seq : BracketString) (state : State): State
+          | nil, state => state
+          | _, nothing => nothing
+          | :: (bracket b true) l, just stack => aux l (just (b :: stack))
+          | :: (bracket b false) l, just nil => nothing
+          | :: (bracket b1 false) seq, just (:: b2 stack) =>
+            \case b1, b2 \with {
+              | square, square => aux seq (just stack)
+              | curly, curly => aux seq (just stack)
+              | round, round => aux seq (just stack)
+              | _, _ => nothing
+            }
+      }
+
+    \func check-correctness-equivalence : check-correctness = check-correctness-modified =>
+      path (\lam i a => aux a @ i)
+      \where {
+        \func aux (seq : BracketString): check-correctness seq = check-correctness-modified seq \elim seq
+          | nil => idp
+          | :: (bracket square false) l => idp
+          | :: (bracket curly false) l => idp
+          | :: (bracket round false) l => idp
+          | :: (bracket b true) l => aux-2
+
+        \func aux-2 {seq : BracketString} {stack : List BracketType}
+          : check-correctness.aux seq stack = (\case check-correctness-modified.aux seq (just stack) \with {
+          | just nil => true
+          | _ => false
+        }) \elim seq, stack
+          | nil, nil => idp
+          | nil, :: a stack => idp
+          | :: (bracket square false) l, nil => idp
+          | :: (bracket curly false) l, nil => idp
+          | :: (bracket round false) l, nil => idp
+          | :: (bracket square true) l, stack => aux-2
+          | :: (bracket curly true) l, stack => aux-2
+          | :: (bracket round true) l, stack => aux-2
+          | :: (bracket b false) l, :: a stack => \case \elim b, \elim a \with {
+            | square, square => aux-2
+            | round, round => aux-2
+            | curly, curly => aux-2
+            | square, curly => idp
+            | square, round => idp
+            | curly, square => idp
+            | curly, round => idp
+            | round, square => idp
+            | round, curly => idp
+          }
+      }
+
+    \func proof-check-correctness-modified :
+      ∀ (seq : BracketString) (check-correctness-modified seq = true <-> IsCorrectBracketSequence seq) =>
+      \lam _ => (proof-check-correctness-modified->, proof-check-correctness-modified<-)
+
+    \func proof-check-correctness-modified-> {seq : BracketString}
+                                             (p : check-correctness-modified seq = true)
+      : IsCorrectBracketSequence seq =>
+      \case check-correctness-modified.aux seq (just nil) \as aux-arg,
+            idp : aux-arg = check-correctness-modified.aux seq (just nil)
+      \with {
+        | just nil, iq => main-aux<- seq nil seq idp (unfinished-cbs cbs-nil nil) idp idp (inv iq)
+        | nothing, iq => contradiction {rewriteI iq (unfold check-correctness-modified p)}
+        | just (:: a a1), iq => contradiction {rewriteI iq (unfold check-correctness-modified p)}
+      }
+
+    \func proof-check-correctness-modified<- {seq : BracketString}
+                                             (p : IsCorrectBracketSequence seq)
+      : check-correctness-modified seq = true
+      | {seq}, inP proof => rewriteI proof.2 (unfold check-correctness-modified (rewrite main-aux-> idp))
+
+    \data UnfinishedCBS
+      | unfinished-cbs CorrectBracketSequence (List (\Sigma BracketType CorrectBracketSequence))
+      \where {
+        \func to-string (ucbs : UnfinishedCBS): BracketString
+          | unfinished-cbs cbs lst => aux cbs lst
+          \where {
+            \func aux (cbs : CorrectBracketSequence)
+                      (lst : List (\Sigma BracketType CorrectBracketSequence)): BracketString
+              | cbs, nil => CorrectBracketSequence.to-string cbs
+              | cbs, :: (b, cbs-2) lst => aux cbs-2 lst ++ bracket b true :: CorrectBracketSequence.to-string cbs
+          }
+
+        \func get-stack (ucbs : UnfinishedCBS): List BracketType
+          | unfinished-cbs _ nil => nil
+          | unfinished-cbs x (:: (b, _) lst) => b :: get-stack (unfinished-cbs x lst)
+
+        \func is-finished {uf : UnfinishedCBS} (p : get-stack uf = nil): IsCorrectBracketSequence (to-string uf) \elim uf
+          | unfinished-cbs c nil => inP (c, idp)
+          | unfinished-cbs c (:: a l) => contradiction
+
+        \func stack-cbs-independence (cbs : CorrectBracketSequence) (lst : List (\Sigma BracketType CorrectBracketSequence))
+          : get-stack (unfinished-cbs cbs lst) = get-stack (unfinished-cbs cbs-nil lst) \elim lst
+          | nil => idp
+          | :: a lst => pmap (a.1 ::) (stack-cbs-independence _ _)
+      }
+
+    \func main-aux<- (str done rest : BracketString)
+                     (str=done+rest : str = done ++ rest)
+                     (curr-ucbs : UnfinishedCBS)
+                     (curr-ucbs<=>done : ucbs-to-string curr-ucbs = done)
+                     (aux-done<=>curr-ucbs-stack : ccm-aux done (just nil) = just (ucbs-get-stack curr-ucbs))
+                     (total-success : ccm-aux str (just nil) = just nil)
+      : IsCorrectBracketSequence str
+    \elim rest, curr-ucbs
+      | nil, curr-ucbs =>
+        \let
+          | done=str => inv (str=done+rest *> ++_nil)
+          | empty-curr-stack => just-injective (inv aux-done<=>curr-ucbs-stack *> rewrite done=str total-success)
+        \in \case ucbs-is-finished empty-curr-stack \with {
+          | inP (cbs, proof) => inP (cbs, proof *> curr-ucbs<=>done *> done=str)
+        }
+      | :: (bracket b false) r, unfinished-cbs c nil =>
+        contradiction {check-aux-assoc-left (rewriteI str=done+rest total-success) aux-done<=>curr-ucbs-stack}
+      | :: (bracket b false) r, unfinished-cbs c (:: (b1, c1) l) =>
+        \let
+          | p => check-aux-assoc-left (rewriteI str=done+rest total-success) aux-done<=>curr-ucbs-stack
+          | q =>  check-aux-assoc-left.conseq-1 done (bracket b false :: nil) (just nil)
+          | b=b1 => \case \elim b, \elim b1, p \return b = b1 \with {
+            | square, square, p => idp
+            | curly, curly, p => idp
+            | round, round, p => idp
+          }
+        \in main-aux<- str (done ++ bracket b false :: nil) r (str=done+rest *> aux-++-::)
+            (unfinished-cbs (cbs-cons-inv b1 c1 c) l)
+            (rewrite (inv curr-ucbs<=>done) (rewrite b=b1 (uc-aux-inv-to-string b1 c1 c l)))
+            (q *> rewrite aux-done<=>curr-ucbs-stack (rewrite b=b1 (\case \elim b1 \with {
+              | square => pmap just (ucbs-stack-cbs-independence c l *> inv (ucbs-stack-cbs-independence _ _))
+              | curly => pmap just (ucbs-stack-cbs-independence c l *> inv (ucbs-stack-cbs-independence _ _))
+              | round => pmap just (ucbs-stack-cbs-independence c l *> inv (ucbs-stack-cbs-independence _ _))
+            }))) total-success
+      | :: (bracket b true) r, unfinished-cbs cbs pairs =>
+        \let
+          | p => check-aux-assoc-left (rewriteI str=done+rest total-success) aux-done<=>curr-ucbs-stack
+          | q => check-aux-assoc-right (rewriteI str=done+rest total-success) p
+          | t => check-aux-assoc-left.conseq-1 done (bracket b true :: nil) (just nil)
+        \in main-aux<- str (done ++ bracket b true :: nil) r (str=done+rest *> aux-++-::)
+            (unfinished-cbs cbs-nil ((b, cbs) :: pairs)) (rewrite curr-ucbs<=>done idp)
+            (rewrite t (rewrite q (rewrite ucbs-stack-cbs-independence idp))) total-success
+
+    \func check-nil-seq {s : check-correctness-modified.State}: check-correctness-modified.aux nil s = s \elim s
+      | nothing => idp
+      | just a => idp
+
+    \func check-nothing-state {seq : BracketString}: check-correctness-modified.aux seq nothing = nothing \elim seq
+      | nil => idp
+      | :: (bracket b false) l => idp
+      | :: (bracket b true) l => idp
+
+    \func check-aux-assoc-left {xs ys : BracketString} {sb sc se : check-correctness-modified.State}
+                               (p : ccm-aux (xs ++ ys) sb = se) (q : ccm-aux xs sb = sc)
+      : ccm-aux ys sc = se
+    \elim xs, sb
+      | nil, _ => rewriteI (rewrite check-nil-seq q) p
+      | :: a l, nothing => run {
+        rewrite (inv q *> check-nothing-state),
+        rewrite (inv p *> check-nothing-state),
+        check-nothing-state
+      }
+      | :: (bracket b false) l, just nil => run { rewriteI p, rewriteI q, check-nothing-state }
+      | :: (bracket b true) l, just _ => check-aux-assoc-left p q
+      | :: (bracket square false) l, just (:: square stack) => check-aux-assoc-left p q
+      | :: (bracket round false) l, just (:: round _) => check-aux-assoc-left p q
+      | :: (bracket curly false) l, just (:: curly _) => check-aux-assoc-left p q
+      | :: (bracket square false) l, just (:: curly _) => run { rewriteI p, rewriteI q, check-nothing-state }
+      | :: (bracket square false) l, just (:: round _) => run { rewriteI p, rewriteI q, check-nothing-state }
+      | :: (bracket curly false) l, just (:: square _) => run { rewriteI p, rewriteI q, check-nothing-state }
+      | :: (bracket curly false) l, just (:: round _) => run { rewriteI p, rewriteI q, check-nothing-state }
+      | :: (bracket round false) l, just (:: square _) => run { rewriteI p, rewriteI q, check-nothing-state }
+      | :: (bracket round false) l, just (:: curly _) => run { rewriteI p, rewriteI q, check-nothing-state }
+      \where {
+        \func conseq-1 (xs ys : BracketString) (state : check-correctness-modified.State)
+          : ccm-aux (xs ++ ys) state = ccm-aux ys (ccm-aux xs state) =>
+          \let
+            | p => ccm-aux (xs ++ ys) state
+            | q => ccm-aux xs state
+          \in \case \elim p, q, idp : ccm-aux (xs ++ ys) state = p, idp : q = ccm-aux xs state \with {
+            | _, _, p, q => p *> inv (check-aux-assoc-left p q)
+          }
+      }
+
+    \func check-aux-assoc-right {xs ys : BracketString}
+                                {sb sc se : List BracketType}
+                                (p : ccm-aux (xs ++ ys) (just sb) = just se)
+                                (q : ccm-aux ys (just sc) = just se)
+      : ccm-aux xs (just sb) = just sc \elim xs, sb
+      | nil, _ => pmap just (check-aux-injective p (p *> inv q))
+      | :: (bracket _ false) l, nil => contradiction
+      | :: (bracket b false) l, (:: b1 sb) => \case \elim b, \elim b1, \elim p, \elim q \with {
+        | square, square, p, q => check-aux-assoc-right p q
+        | curly, curly, p, q => check-aux-assoc-right p q
+        | round, round, p, q => check-aux-assoc-right p q
+      }
+      | :: (bracket b true) l, _ => check-aux-assoc-right p q
+
+    \func check-aux-injective {xs : BracketString} {stack stack1 z : List BracketType}
+                              (q : ccm-aux xs (just stack) = just z)
+                              (p : ccm-aux xs (just stack) = ccm-aux xs (just stack1))
+      : stack = stack1
+
+      | {nil}, {_}, {_}, _, p => just-injective p
+      | {:: (bracket _ false) l}, {nil}, {_}, q, p => contradiction
+      | {:: (bracket _ false) l}, {_}, {nil}, q, p => contradiction
+      | {:: (bracket _ true) l}, {_}, {_}, q, p => pmap safe-tail (check-aux-injective q p)
+      | {:: (bracket b1 false) l}, {:: b2 stack}, {:: b3 stack1}, q, p =>
+        \case \elim b1, \elim b2, \elim b3, \elim p, \elim q \with {
+          | square, square, square, p, q => pmap (square ::) (check-aux-injective q p)
+          | curly, curly, curly, p, q => pmap (curly ::) (check-aux-injective q p)
+          | round, round, round, p, q => pmap (round ::) (check-aux-injective q p)
+          | square, square, curly, p, q => contradiction
+          | square, square, round, p, q => contradiction
+          | curly, curly, square, p, q => contradiction
+          | curly, curly, round, p, q => contradiction
+          | round, round, square, p, q => contradiction
+          | round, round, curly, p, q => contradiction
+        }
+
+    \func aux-++-:: {A : \Type} {a : A} {xs ys : List A}: xs ++ a :: ys = (xs ++ a :: nil) ++ ys \elim xs
+      | nil => idp
+      | :: a1 xs => pmap (a1 ::) aux-++-::
+
+    \func cbs-cons-inv (b : BracketType) (left right : CorrectBracketSequence): CorrectBracketSequence \elim left
+      | cbs-nil => cbs-cons b right cbs-nil
+      | cbs-cons b1 left1 left2 => cbs-cons b1 left1 (cbs-cons-inv b left2 right)
+
+    \func cbs-cons-inv-proof (b : BracketType) (left right : CorrectBracketSequence)
+      : cbs-to-string (cbs-cons-inv b left right) =
+    cbs-to-string left ++ bracket b true :: cbs-to-string right ++ bracket b false :: nil
+    \elim left
+      | cbs-nil => idp
+      | cbs-cons b1 left1 left2 => run {
+        rewrite (cbs-cons-inv-proof b left2 right),
+        rewrite ++-assoc idp
+      }
+
+    \func uc-aux-inv-to-string (b : BracketType) (l r : CorrectBracketSequence)
+                               (lst : List (\Sigma BracketType CorrectBracketSequence))
+      : ucbs-to-string.aux (cbs-cons-inv b l r) lst
+      = (ucbs-to-string.aux l lst ++ bracket b true :: cbs-to-string r) ++ bracket b false :: nil
+    \elim lst
+      | nil => rewrite ++-assoc (cbs-cons-inv-proof b l r)
+      | :: a lst => run { rewrite ++-assoc, rewrite ++-assoc,
+                          pmap (ucbs-to-string.aux a.2 lst ++), pmap (bracket a.1 true ::),
+                          cbs-cons-inv-proof b l r
+      }
+
+    \func safe-tail {A : \Type} (xs : List A): List A
+      | nil => nil
+      | :: a xs => xs
+
+    \func main-aux-> {cbs : CorrectBracketSequence}: ccm-aux (cbs-to-string cbs) (just nil) = just nil
+      | {cbs-nil} => idp
+      | {cbs-cons b cbs1 cbs2} =>
+        \let
+          | z => rewrite (aux-empty-stack-subst _ _ (b :: nil) (main-aux-> {cbs1}))
+              (cc-al-c1 (bracket b true :: cbs-to-string cbs1) (bracket b false :: nil) (just nil))
+          | m => \case \elim b, \elim z
+          \return ccm-aux (cbs-to-string cbs1 ++ bracket b false :: nil) (just (b :: nil)) = just nil \with {
+            | square, z => z
+            | curly, z => z
+            | round, z => z
+          }
+        \in run {
+          rewriteI (inv aux-++-::),
+          rewriteI (main-aux-> {cbs2}),
+          rewriteI m (cc-al-c1 (bracket b true :: cbs-to-string cbs1 ++ bracket b false :: nil)
+              (cbs-to-string cbs2) (just nil))
+        }
+
+    \func aux-empty-stack-subst {seq : BracketString}
+                                (stack1 stack2 stack3 : List BracketType)
+                                (p : check-correctness-modified.aux seq (just stack1) = just stack2)
+      : check-correctness-modified.aux seq (just (stack1 ++ stack3)) = just (stack2 ++ stack3)
+      | {nil}, nil, nil, _, p => idp
+      | {_}, nil, _, nil, p => rewrite ++_nil p
+      | {nil}, :: a stack1, :: a1 stack2, nil, p => rewrite ++_nil (rewrite ++_nil p)
+      | {nil}, :: a stack1, :: a1 stack2, :: a2 stack3, p =>
+        pmap (\lam x => just (x ++ a2 :: stack3)) (just-injective p)
+      | {:: (bracket b true) l}, _, _, _, p => aux-empty-stack-subst _ _ _ p
+      | {:: (bracket _ false) l}, nil, nil, :: _ stack3, p => contradiction
+      | {:: (bracket b false) l}, nil, :: a1 stack2, :: a2 stack3, p => contradiction
+      | {:: (bracket b false) l}, :: a1 stack1, stack2, stack3, p => \case \elim b, \elim a1, \elim p \with {
+        | square, square, p => aux-empty-stack-subst _ _ _ p
+        | curly, curly, p => aux-empty-stack-subst _ _ _ p
+        | round, round, p => aux-empty-stack-subst _ _ _ p
+      }
+  }

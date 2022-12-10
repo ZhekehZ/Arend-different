@@ -1,0 +1,29 @@
+\import BracketSequence
+\import Data.Bool
+\import Data.List
+\import Logic.Meta
+
+\data CorrectBracketSequence
+  | cbs-nil                                                      -- S -> e
+  | cbs-cons BracketType CorrectBracketSequence CorrectBracketSequence -- S -> (S)S | [S]S | {S}S
+  \where {
+    \func to-string (cbs : CorrectBracketSequence): BracketString
+      | cbs-nil => nil
+      | cbs-cons b cbs1 cbs2 => bracket b true :: to-string cbs1 ++ bracket b false :: to-string cbs2
+  }
+
+\type IsCorrectBracketSequence (seq : BracketString) => ∃ (cbs : CorrectBracketSequence) (to-string cbs = seq)
+  \where {
+    \open CorrectBracketSequence (to-string)
+  }
+
+\func check-correctness (seq : BracketString): Bool => aux seq nil
+  \where {
+    \func aux (seq : BracketString) (stack : List BracketType): Bool
+      | nil, nil => true
+      | :: (bracket b true) l, stack => aux l (b :: stack)
+      | :: (bracket square false) seq, (:: square stack) => aux seq stack
+      | :: (bracket curly false) seq, (:: curly stack) => aux seq stack
+      | :: (bracket round false) seq, (:: round stack) => aux seq stack
+      | _, _ => false
+  }
