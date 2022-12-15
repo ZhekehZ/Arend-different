@@ -1,12 +1,8 @@
 \import Data.Bool
 \import Data.List
+\import Set
 
-\data BracketType
-  | square
-  | curly
-  | round
+\data Bracket (BTypes : DecSet)
+  | bracket BTypes (is-open : Bool)
 
-\data Bracket
-  | bracket BracketType (is-open : Bool)
-
-\func BracketString => List Bracket
+\func BracketString (BTypes : DecSet) => List (Bracket BTypes)

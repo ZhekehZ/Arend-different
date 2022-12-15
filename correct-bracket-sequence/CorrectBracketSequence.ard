@@ -2,28 +2,32 @@
 \import Data.Bool
 \import Data.List
 \import Logic.Meta
+\import Set
 
-\data CorrectBracketSequence
-  | cbs-nil                                                      -- S -> e
-  | cbs-cons BracketType CorrectBracketSequence CorrectBracketSequence -- S -> (S)S | [S]S | {S}S
+\data CorrectBracketSequence (BTypes : DecSet)
+  | cbs-nil                                         -- S -> e
+  | cbs-cons BTypes (CorrectBracketSequence BTypes)
+                    (CorrectBracketSequence BTypes) -- S -> (S)S | [S]S | {S}S
   \where {
-    \func to-string (cbs : CorrectBracketSequence): BracketString
+    \func to-string {B : DecSet} (cbs : CorrectBracketSequence B): BracketString B
       | cbs-nil => nil
       | cbs-cons b cbs1 cbs2 => bracket b true :: to-string cbs1 ++ bracket b false :: to-string cbs2
   }
 
-\type IsCorrectBracketSequence (seq : BracketString) => ∃ (cbs : CorrectBracketSequence) (to-string cbs = seq)
+\type IsCorrectBracketSequence {B : DecSet} (seq : BracketString B) =>
+  ∃ (cbs : CorrectBracketSequence B) (to-string cbs = seq)
   \where {
     \open CorrectBracketSequence (to-string)
   }
 
-\func check-correctness (seq : BracketString): Bool => aux seq nil
+\func check-correctness {B : DecSet} (seq : BracketString B): Bool => aux seq nil
   \where {
-    \func aux (seq : BracketString) (stack : List BracketType): Bool
+    \func aux {B : DecSet} (seq : BracketString B) (stack : List B): Bool
       | nil, nil => true
-      | :: (bracket b true) l, stack => aux l (b :: stack)
-      | :: (bracket square false) seq, (:: square stack) => aux seq stack
-      | :: (bracket curly false) seq, (:: curly stack) => aux seq stack
-      | :: (bracket round false) seq, (:: round stack) => aux seq stack
+      | :: (bracket b true) seq, stack => aux seq (b :: stack)
+      | :: (bracket b false) seq, (:: head stack) => \case b == head \with {
+        | true => aux seq stack
+        | false => false
+      }
       | _, _ => false
   }

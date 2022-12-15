@@ -1,0 +1,46 @@
+\import BracketSequence
+\import CorrectBracketSequence
+\import CorrectBracketSequence
+\import Correctness
+\import Data.Bool
+\import Data.List
+\import Logic.Meta
+\import Set
+
+\data BracketType | round | square | curly -- ( [ {
+
+\instance BracketTypeIsDecSet : DecSet
+  | E => BracketType
+  | decideEq x y => \case \elim x, \elim y \with {
+    | round, round => yes idp
+    | square, square => yes idp
+    | curly, curly => yes idp
+    | round, square => no (\lam p => contradiction)
+    | round, curly => no (\lam p => contradiction)
+    | square, round => no (\lam p => contradiction)
+    | square, curly => no (\lam p => contradiction)
+    | curly, round => no (\lam p => contradiction)
+    | curly, square => no (\lam p => contradiction)
+  }
+
+\func example-string => C[ :: R[ :: ]R :: ]C :: S[ :: C[ :: ]C :: R[ :: ]R :: ]S :: nil -- {()}[{}()]
+  \where {
+    \func opened (b : BracketType) => bracket b true
+
+    \func closed (b : BracketType) => bracket b false
+
+    \func R[ => opened round   -- (
+
+    \func ]R => closed round   -- )
+
+    \func C[ => opened curly   -- {
+
+    \func ]C => closed curly   -- }
+
+    \func S[ => opened square  -- [
+
+    \func ]S => closed square  -- ]
+  }
+
+\func example-string-is-correct : IsCorrectBracketSequence example-string =>
+  (proof-check-correctness _).1 idp
